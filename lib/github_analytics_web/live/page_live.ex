@@ -1,39 +1,36 @@
 defmodule GithubAnalyticsWeb.PageLive do
   use GithubAnalyticsWeb, :live_view
 
+  alias GithubAnalytics.Query
+
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, query: "", results: %{})}
+    {:ok, assign(socket, display_repository_data: false)}
   end
 
   @impl true
-  def handle_event("suggest", %{"q" => query}, socket) do
-    {:noreply, assign(socket, results: search(query), query: query)}
+  def handle_event("submit", %{"repository" => %{"name" => name, "owner" => owner}}, socket) do
+    repository = get_repository_data(name, owner)
+
+    socket =
+      socket
+      |> assign(name_with_owner: repository["nameWithOwner"])
+      |> assign(description: repository["description"])
+      |> assign(url: repository["homepageUrl"])
+      |> assign(created_at: repository["createdAt"])
+      |> assign(stargazer_count: repository["stargazerCount"])
+      |> assign(fork_count: repository["forkCount"])
+      |> assign(display_repository_data: true)
+
+    {:noreply, socket}
   end
 
-  @impl true
-  def handle_event("search", %{"q" => query}, socket) do
-    case search(query) do
-      %{^query => vsn} ->
-        {:noreply, redirect(socket, external: "https://hexdocs.pm/#{query}/#{vsn}")}
-
-      _ ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "No dependencies found matching \"#{query}\"")
-         |> assign(results: %{}, query: query)}
+  defp get_repository_data(name, owner) do
+    case Query.repository(name, owner) do
+      {:ok, repository} ->
+        repository
+      {:error, _} ->
+        %{}
     end
-  end
-
-  defp search(query) do
-    if not GithubAnalyticsWeb.Endpoint.config(:code_reloader) do
-      raise "action disabled when not in development"
-    end
-
-    for {app, desc, vsn} <- Application.started_applications(),
-        app = to_string(app),
-        String.starts_with?(app, query) and not List.starts_with?(desc, ~c"ERTS"),
-        into: %{},
-        do: {app, vsn}
   end
 end
